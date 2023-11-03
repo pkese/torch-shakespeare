@@ -1,0 +1,19 @@
+# project 
+*.pt.zip
+
+# dotnet specific
+
+[Bb]in/
+[Oo]bj/
+.fake
+
+# python specific
+.micromamba/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+.pt

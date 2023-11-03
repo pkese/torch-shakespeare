@@ -1,0 +1,11 @@
+name: testenv
+channels:
+  - pytorch
+  - nvidia
+  - conda
+  - anaconda
+dependencies:
+  - python=3.11
+  - pytorch=2.1.0
+  - pytorch-cuda=12.1
+  - ipykernel
