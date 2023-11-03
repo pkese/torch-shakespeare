@@ -7,14 +7,9 @@
 open System
 open TorchSharp
 
-let device =
-    match torch.cuda.is_available() with
-    | true -> torch.CUDA
-    | false -> torch.CPU
+let device = if torch.cuda.is_available() then torch.CUDA else torch.CPU
 
 printfn "device=%A" device
-
-//#load "llm.fsx"
 
 let cfg = {|
     vocabSize = 65
@@ -26,6 +21,7 @@ let cfg = {|
     bias = false
 |}        
 
+//#load "llm.fsx"
 let model =
     //new Llm.LanguageModel(2, cfg.nHeads, cfg.encodingSize, cfg.vocabSize, cfg.blockSize, cfg.bias, cfg.dropout)
     torch.jit.load<torch.Tensor, torch.Tensor>("shakespeare.pt.zip")
@@ -37,11 +33,9 @@ for struct(name,param) in model.named_parameters() do
 
 let xs =
     torch
-        .tensor([| for i in 1..cfg.blockSize -> Random.Shared.Next() % cfg.vocabSize |], device=device, dtype=torch.int64)
+        .tensor([| for i in 1..cfg.blockSize -> Random.Shared.Next(cfg.vocabSize) |], device=device, dtype=torch.int64)
         .unsqueeze(0)
 
 let ys = model.forward(xs)
 
 printfn $"shapes: xs=%A{xs.shape} ys=%A{ys.shape}"
-
-
