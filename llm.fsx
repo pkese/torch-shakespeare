@@ -15,12 +15,13 @@
 open System
 open TorchSharp
 
-let forceDevice =
+let enforceDevice = // select a specific device if you don't want default behaviour
     //Some torch.CPU
-    None
+    //Some torch.CUDA
+    None // default (see below)
 
 let device = 
-    match forceDevice with
+    match enforceDevice with
     | Some device -> device
     | None ->
         if torch.cuda.is_available() then
@@ -31,14 +32,12 @@ let device =
             torch.CPU
 
 
-
 type CausalSelfAttention(nHeads:int64, encodingSize:int64, hasBias:bool, dropout:float) as this =
     inherit torch.nn.Module<torch.Tensor, torch.Tensor>("CausalSelfAttention")
     let c_attn = torch.nn.Linear(encodingSize, encodingSize * 3L, hasBias=hasBias, dtype=torch.float32)
     let resid_dropout = torch.nn.Dropout(dropout)
     do
         this.RegisterComponents()
-        //if device.``type`` = DeviceType.CUDA then this.``to``(device) |> ignore    
 
     override this.forward(xs) =
         let xs_shape = xs.shape
@@ -51,22 +50,6 @@ type CausalSelfAttention(nHeads:int64, encodingSize:int64, hasBias:bool, dropout
             resid_dropout.forward(y)
         | _ -> failwith "Expected input shape [B, T, C]"
 
-    (* // base forward without opt
-    member this.forward(xs) =
-        let qkv = c_attn.forward(xs).split(encodingSize, dim=2)
-        printfn "shape1 = %A" (qkv.[0].shape)
-        let xs_shape = xs.shape
-        match xs_shape, qkv with
-        | [|B;T;C|], [|q;k;v|]->
-            let headSize = [|B;T;nHeads;C/nHeads|]
-            use k = k.view(headSize).transpose(1,2) // (B, nh, T, hs)
-            use q = q.view(headSize).transpose(1,2)
-            use v = v.view(headSize).transpose(1,2)
-            use y = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_casual=true, p=dropout)
-            use y = y.transpose(1,2).contiguous().view(xs_shape)
-            resid_dropout.forward(y)
-        | _ -> failwith "Expected input shape [B, T, C]"
-    *)        
 
 type MLP(encodingSize:int64, hasBias:bool, dropout:float) as this =
     inherit torch.nn.Module<torch.Tensor, torch.Tensor>("MLP")
@@ -78,10 +61,10 @@ type MLP(encodingSize:int64, hasBias:bool, dropout:float) as this =
     |])
     do
         this.RegisterComponents()
-        //if device.``type`` = DeviceType.CUDA then this.``to``(device) |> ignore    
 
     override this.forward(xs) = net.forward(xs)
 
+/// Transformer block with attention and MLP
 type Block(nHeads, encodingSize:int64, hasBias:bool, dropout) as this =
     inherit torch.nn.Module<torch.Tensor, torch.Tensor>("Block")
     let ln1 = torch.nn.LayerNorm(encodingSize, dtype=torch.float32)
@@ -90,7 +73,7 @@ type Block(nHeads, encodingSize:int64, hasBias:bool, dropout) as this =
     let mlp = new MLP(encodingSize, hasBias, dropout)
     do
         this.RegisterComponents()
-        //if device.``type`` = DeviceType.CUDA then this.``to``(device) |> ignore
+
     override this.forward(xs) =
         use ln1 = ln1.forward xs
         use attn = attn.forward ln1
@@ -99,6 +82,7 @@ type Block(nHeads, encodingSize:int64, hasBias:bool, dropout) as this =
         use mlp = mlp.forward ln2
         xs + mlp
 
+
 type EmbeddingModel(vocabSize, blockSize, encodingSize) as this =
     inherit torch.nn.Module<torch.Tensor, torch.Tensor>("EmbeddingModel")
     let tok_emb = torch.nn.Embedding(vocabSize, encodingSize, dtype=torch.float32)
@@ -106,16 +90,15 @@ type EmbeddingModel(vocabSize, blockSize, encodingSize) as this =
     let positions = torch.arange(0L, blockSize, dtype=torch.int64, requires_grad=false)
     do
         this.RegisterComponents()
-        //if device.``type`` = DeviceType.CUDA then this.``to``(device) |> ignore    
 
     override _.forward (input: torch.Tensor) =
         use tok_emb = tok_emb.forward(input)
         use pos_emb = pos_emb.forward(positions)
         tok_emb + pos_emb
 
+
 type LanguageModel(nLayers, nHeads, nEmbed, vocabSize:int, blockSize:int, hasBias, dropout) as this =
     inherit torch.nn.Module<torch.Tensor, torch.Tensor>("LanguageModel")
-    let ``1`` = Scalar.op_Implicit(1.0f)
     let layers = torch.nn.Sequential([|
         yield "embed", new EmbeddingModel(vocabSize, blockSize, nEmbed) :> torch.nn.Module<_,_>
         for layer in 1..nLayers do
@@ -125,7 +108,6 @@ type LanguageModel(nLayers, nHeads, nEmbed, vocabSize:int, blockSize:int, hasBia
 
     do
         this.RegisterComponents()
-        //if device.``type`` = DeviceType.CUDA then this.``to``(device) |> ignore    
 
     override _.forward (input: torch.Tensor) =
         layers.forward input
