@@ -3,7 +3,7 @@
 
 ### Python
 
-create the Python environment using conde:
+create the Python environment using anaconda (or miniconda, micromamba, etc):
 
     conda env create -f environment.yml
     conda activate testenv
